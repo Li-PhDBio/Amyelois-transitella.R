@@ -25,13 +25,12 @@ df_clean <- clean_coordinates(df,
                               lon = "lon", lat = "lat",
                               species = "species",
                               tests = c("capitals", "centroids", "equal", "gbif", 
-                                        "institutions", "zeros", "seas"), # 根据物种习性调整 "seas"
+                                        "institutions", "zeros", "seas"), 
                               value = "clean")
 
-# 移除 1970 年以前的记录 (根据你的气候数据基准调整，对应意见9)
+# 移除 1970 年以前的记录
 # 假设气候数据是 WorldClim 1970-2000
 df_clean <- df_clean %>% filter(year >= 1970)
 
-
-# 保存清洗后的数据 (意见 1, 19)
+# 保存清洗后的数据
 write.csv(df_clean, "AT_cleaned.csv", row.names = FALSE)
