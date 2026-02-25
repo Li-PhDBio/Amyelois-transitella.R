@@ -1,157 +1,154 @@
----
-title: "Amyelois transitella"
-output:
-  html_document: 
-    fig_width: 28
-    fig_height: 12.8
-    fig_caption: true
-    theme: journal
-    df_print: default
----
-
-```{r Package}
-library(sf)
-library(readr)
-library(sp)
-library(terra)
-library(dplyr)
-library(caret)
-library(dismo)
-library(plyr)
 library(biomod2)
-library(tidyterra)
-```
+library(terra)
 
-```{r Data.input}
-#加载物种分布数据
-species_data <- read_csv(
-  file = "AT_biomod.csv")
+species_data <- read_csv(file = "AT_cleaned.csv")
 head(species_data)
 
-#Adds another column indicating these are presence points
-species_data <- species_data %>%mutate(presence = 1)
-head(species_data)
+# Select the name of the studied species
+myRespName <- 'Amyelois transitella'
 
+# Get corresponding presence/absence data
+myResp <- species_data$`Amyelois transitella`
 
-# 筛选数据
-myRespName <- 'Amyelois.transitella' # 物种名称
-myResp <- species_data$presence # 物种分布数据
-myRespXY <- species_data[, c("x", "y")]
+# Get corresponding XY coordinates
+myRespXY <- species_data[, c('X_WGS84', 'Y_WGS84')]
 
-# 读取气候数据
-climdata_current <- list.files("model_bio", pattern = ".tif", full.names = TRUE)
+climdata_current <- list.files("bioclim_back", pattern = ".tif", full.names = TRUE)
 climate_data <- terra::rast(climdata_current)
-```
 
-```{r Absences.point}
-# 生成多组假存在数据
+climdata_world <- list.files("bioclim_world", pattern = ".tif", full.names = TRUE)
+climate_world <- terra::rast(climdata_world)
+
+# # Select multiple sets of pseudo-absences#
+# # Transform true absences into potential pseudo-absences
 myResp.PA <- ifelse(myResp == 1, 1, NA)
+# myResp.PA.vect <- vect(cbind(myRespXY, myResp.PA), geom = c('X_WGS84','Y_WGS84')) 
+# # Format Data with pseudo-absences : random method
+myBiomodData.PA <- BIOMOD_FormatingData(resp.name = myRespName,
+                                        resp.var = myResp.PA,
+                                        expl.var = climate_data,
+                                        resp.xy = myRespXY,
+                                        data.type = "binary",
+                                        PA.nb.rep = 5,
+                                        PA.nb.absences = 1000,
+                                        PA.strategy = 'sre',
+                                        PA.sre.quant = 0.10,
+                                        filter.raster = TRUE)
+myBiomodData.PA
+summary(myBiomodData.PA)
+plot(myBiomodData.PA)
 
-# 多组假存在数据
-myBiomodData <- BIOMOD_FormatingData(resp.name = myRespName,
-                                     resp.var = myResp.PA,
-                                     resp.xy = myRespXY,
-                                     expl.var = climate_data,
-                                     filter.raster = TRUE,
-                                     PA.nb.rep = 2,
-                                     PA.nb.absences = c(275, 550),
-                                     PA.strategy = 'random')
-myBiomodData
-#summary(myBiomodData)
-plot(myBiomodData)
-```
 
-```{r Modle.option}
-# k-fold selection
-cv.k <- bm_CrossValidation(bm.format = myBiomodData,
-                           strategy = 'kfold',
-                           nb.rep = 2,
-                           k = 3)
-head(cv.k)
-apply(cv.k, 2, table)
-plot(cv.k)
+# # k-fold selection
+# cv.k <- bm_CrossValidation(bm.format = myBiomodData,
+#                            strategy = 'kfold',
+#                            nb.rep = 2,
+#                            k = 3)
+# 
+# # stratified selection (geographic)
+cv.s <- bm_CrossValidation(bm.format = myBiomodData.PA,
+                           strategy = 'strat',
+                           k = 4,
+                           balance = 'presences',
+                           strat = 'y')
+cv.s <- cbind('_allData_allRun' = TRUE , cv.s)
 
-bm_MakeFormula(resp.name = myRespName,
-               expl.var = head(climate_data),
-               type = 'quadratic',
-               interaction.level = 0)
+# cv.s$`_allData_allRun` <- TRUE
+# head(cv.k)
+head(cv.s)
 
-# default parameters
-opt.d <- bm_ModelingOptions(data.type = 'binary',
-                            models = c("ANN", "CTA","FDA","GAM","GBM","GLM","MARS","MAXNET","RF","RFd","SRE","XGBOOST"),
-                            strategy = 'default')
 
-opt.d
-opt.d@models
-opt.d@options$ANN.binary.nnet.nnet
-names(opt.d@options$ANN.binary.nnet.nnet@args.values)
-```
+data(ModelsTable)
+ModelsTable
 
-```{r Single.modle, warning=FALSE, paged.print=TRUE}
+Models <- c('CTA', 'ANN', 'FDA', 'GAM', 'GBM', 'MARS', 'MAXNET', 'RF', 'SRE', 'XGBOOST')
+
+# # bigboss parameters
+# opt.b <- bm_ModelingOptions(data.type = 'binary',
+#                           models = allModels,
+#                           strategy = 'bigboss')
+
+opt.bf <- bm_ModelingOptions(data.type = 'binary',
+                             models = Models,
+                             strategy = 'bigboss',
+                             bm.format = myBiomodData.PA,
+                             calib.lines = cv.s)
+# # tuned parameters with formated data
+# opt.t <- bm_ModelingOptions(data.type = 'binary',
+#                             models = c('SRE', 'XGBOOST'),
+#                             strategy = 'tuned',
+#                             bm.format = myBiomodData)
+# 
+# opt.b
+opt.bf
+
 # Model single models
-myBiomodModelOut <- BIOMOD_Modeling(bm.format = myBiomodData,
-                                    modeling.id = 'AllModels',
-                                    models = c("ANN","CTA","FDA","GAM","GBM","GLM","MARS","MAXNET","RF","RFd","SRE","XGBOOST"),
-                                    CV.strategy = 'random',
-                                    CV.nb.rep = 2,
-                                    CV.perc = 0.8,
-                                    OPT.strategy = 'bigboss',
-                                    metric.eval = c('TSS','ROC','KAPPA'),
-                                    var.import = 2,
-                                    seed.val = 42)
+myBiomodModelOut <- BIOMOD_Modeling(bm.format = myBiomodData.PA,
+                                    modeling.id = 'Models',
+                                    models = Models,
+                                    CV.strategy = 'user.defined',
+                                    CV.user.table = cv.s,
+                                    OPT.strategy = 'user.defined',
+                                    OPT.user = opt.bf,
+                                    CV.do.full.models = TRUE,
+                                    metric.eval = c('TSS', 'AUCroc', 'KAPPA'),
+                                    var.import = 3)
+# seed.val = 123)
+# nb.cpu = 8)
 myBiomodModelOut
-```
 
-```{r Modles.corce, warning=FALSE, paged.print=TRUE}
 # Get evaluation scores & variables importance
 get_evaluations(myBiomodModelOut)
 get_variables_importance(myBiomodModelOut)
 
 # Represent evaluation scores & variables importance
-# 显示所有三个指标
-bm_PlotEvalMean(bm.out = myBiomodModelOut, 
-                dataset = 'calibration',
-                metric.eval = c('TSS', 'ROC'))
-bm_PlotEvalMean(bm.out = myBiomodModelOut, dataset = 'validation',metric.eval = c('TSS', 'ROC'))
-bm_PlotEvalBoxplot(bm.out = myBiomodModelOut, group.by = c('algo', 'algo'))
-bm_PlotEvalBoxplot(bm.out = myBiomodModelOut, group.by = c('algo', 'run'))
+bm_PlotEvalMean(bm.out = myBiomodModelOut, dataset = 'calibration')
+bm_PlotEvalMean(bm.out = myBiomodModelOut, dataset = 'validation')
+bm_PlotEvalBoxplot(bm.out = myBiomodModelOut, dataset = 'calibration', group.by = c('algo', 'algo'))
+bm_PlotEvalBoxplot(bm.out = myBiomodModelOut, dataset = 'calibration', group.by = c('algo', 'run'))
 bm_PlotVarImpBoxplot(bm.out = myBiomodModelOut, group.by = c('expl.var', 'algo', 'algo'))
 bm_PlotVarImpBoxplot(bm.out = myBiomodModelOut, group.by = c('expl.var', 'algo', 'run'))
 bm_PlotVarImpBoxplot(bm.out = myBiomodModelOut, group.by = c('algo', 'expl.var', 'run'))
 
 # Represent response curves
 bm_PlotResponseCurves(bm.out = myBiomodModelOut, 
-                      models.chosen = get_built_models(myBiomodModelOut)[c(1:3, 12:14)],
-                      fixed.var = 'median') 
+                      models.chosen = get_built_models(myBiomodModelOut)[c(1, 4, 8, 10, 13)],
+                      fixed.var = 'median')
 bm_PlotResponseCurves(bm.out = myBiomodModelOut, 
-                      models.chosen = get_built_models(myBiomodModelOut)[c(1:3, 12:14)],
+                      models.chosen = get_built_models(myBiomodModelOut)[c(1, 4, 8, 10, 13)],
                       fixed.var = 'min')
-```
+bm_PlotResponseCurves(bm.out = myBiomodModelOut, 
+                      models.chosen = get_built_models(myBiomodModelOut)[4],
+                      fixed.var = 'median',
+                      do.bivariate = TRUE)
 
-```{r ensemblemodels, warning=FALSE, paged.print=TRUE}
+# Explore models' outliers & residuals
+bm_ModelAnalysis(bm.mod = myBiomodModelOut,
+                 models.chosen = get_built_models(myBiomodModelOut)[c(1, 4, 8, 10, 13)])
+
+
 # Model ensemble models
-myBiomodEM <- BIOMOD_EnsembleModeling(
-  bm.mod = myBiomodModelOut,
-  models.chosen = 'all',
-  em.by = 'all',
-  em.algo = c('EMwmean', 'EMmean'),      # 两种集成方法
-  metric.select = c('TSS'),              # TSS更稳定，避免过拟合
-  metric.select.thresh = c(0.80),        # 保留验证TSS > 0.90的算法
-  metric.eval = c('TSS', 'ROC', 'KAPPA'),
-  var.import = 5,
-  EMci.alpha = 0.05,
-  EMwmean.decay = 'proportional'
-)
-myBiomodEM
-```
 
-```{r EMmodels.scores, warning=FALSE}
+myBiomodEM <- BIOMOD_EnsembleModeling(bm.mod = myBiomodModelOut,
+                                      models.chosen = 'all',
+                                      em.by = 'all',
+                                      em.algo = c('EMmedian', 'EMmean', 'EMwmean',
+                                                  'EMca', 'EMci', 'EMcv'),
+                                      metric.select = 'TSS',
+                                      metric.select.thresh = c(0.60),
+                                      metric.eval = c('TSS', 'AUCroc', 'KAPPA'),
+                                      var.import = 3,
+                                      EMci.alpha = 0.05,
+                                      EMwmean.decay = 'proportional')
+myBiomodEM
+
+# Get evaluation scores & variables importance
 get_evaluations(myBiomodEM)
 get_variables_importance(myBiomodEM)
 
 # Represent evaluation scores & variables importance
-bm_PlotEvalMean(bm.out = myBiomodEM, group.by = 'full.name',metric.eval = c('TSS', 'ROC'))
-bm_PlotEvalBoxplot(bm.out = myBiomodEM, group.by = c('full.name', 'full.name'))
+bm_PlotEvalMean(bm.out = myBiomodEM, dataset = 'calibration', group.by = 'full.name')
+bm_PlotEvalBoxplot(bm.out = myBiomodEM, dataset = 'calibration', group.by = c('full.name', 'full.name'))
 bm_PlotVarImpBoxplot(bm.out = myBiomodEM, group.by = c('expl.var', 'full.name', 'full.name'))
 bm_PlotVarImpBoxplot(bm.out = myBiomodEM, group.by = c('expl.var', 'algo', 'merged.by.run'))
 bm_PlotVarImpBoxplot(bm.out = myBiomodEM, group.by = c('algo', 'expl.var', 'merged.by.run'))
@@ -159,246 +156,104 @@ bm_PlotVarImpBoxplot(bm.out = myBiomodEM, group.by = c('algo', 'expl.var', 'merg
 # Represent response curves
 bm_PlotResponseCurves(bm.out = myBiomodEM, 
                       models.chosen = get_built_models(myBiomodEM)[c(1, 6, 7)],
-                     fixed.var = 'median')
+                      fixed.var = 'median')
 bm_PlotResponseCurves(bm.out = myBiomodEM, 
                       models.chosen = get_built_models(myBiomodEM)[c(1, 6, 7)],
                       fixed.var = 'min')
-```
-
-
-```{r Project.single.models, warning=FALSE, paged.print=TRUE}
+bm_PlotResponseCurves(bm.out = myBiomodEM, 
+                      models.chosen = get_built_models(myBiomodEM)[7],
+                      fixed.var = 'median',
+                      do.bivariate = TRUE)
 # Project single models
 myBiomodProj <- BIOMOD_Projection(bm.mod = myBiomodModelOut,
                                   proj.name = 'Current',
-                                  new.env = climate_data,
+                                  new.env = climate_world,
                                   models.chosen = 'all',
                                   metric.binary = 'all',
                                   metric.filter = 'all',
-                                  build.clamping.mask = TRUE)
+                                  build.clamping.mask = TRUE,
+                                  keep.in.memory = FALSE)
 myBiomodProj
 plot(myBiomodProj)
-```
 
-```{r Project.ensemble.models, warning=FALSE, paged.print=TRUE}
 # Project ensemble models (from single projections)
 myBiomodEMProj <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM, 
                                              bm.proj = myBiomodProj,
                                              models.chosen = 'all',
                                              metric.binary = 'all',
                                              metric.filter = 'all')
-# Project ensemble models (building single projections)
-myBiomodEMProj <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM,
-                                             proj.name = 'CurrentEM',
-                                             new.env = climate_data,
-                                             models.chosen = 'all',
-                                             metric.binary = 'all',
-                                             metric.filter = 'all')
+
 myBiomodEMProj
 plot(myBiomodEMProj)
-```
 
-```{r 2140126, warning=FALSE, paged.print=TRUE}
-# 2140126
-# Load environmental variables extracted from BIOCLIM 2
-ssp2140126 <- list.files("2140126", pattern = ".tif$", full.names = TRUE)
-future2140126 <- stack(ssp2140126)
+# Load environmental variables extracted from BIOCLIM 
+climdata_2140126 <- list.files("bioclim_126n", pattern = ".tif", full.names = TRUE)
+climate_2140126 <- terra::rast(climdata_2140126)
+climdata_4160126 <- list.files("bioclim_126f", pattern = ".tif", full.names = TRUE)
+climate_4160126 <- terra::rast(climdata_4160126)
+climdata_2140585 <- list.files("bioclim_585n", pattern = ".tif", full.names = TRUE)
+climate_2140585 <- terra::rast(climdata_2140585)
+climdata_4160585 <- list.files("bioclim_585f", pattern = ".tif", full.names = TRUE)
+climate_4160585 <- terra::rast(climdata_4160585)
 # Project onto future conditions
-BiomodProj2140126 <- BIOMOD_Projection(bm.mod = myBiomodModelOut,
-                                       proj.name = '2140126',
-                                       new.env = future2140126,
-                                       models.chosen = 'all',
-                                       metric.binary = 'all',
-                                       build.clamping.mask = TRUE)
+myBiomodProjFuture <- BIOMOD_Projection(bm.mod = myBiomodModelOut,
+                                        proj.name = 'Future2140126',
+                                        new.env = climate_2140126,
+                                        models.chosen = 'all',
+                                        metric.binary = 'all',
+                                        build.clamping.mask = TRUE)
+myBiomodEMProjFuture <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM, 
+                                                   bm.proj =myBiomodProjFuture,
+                                                   models.chosen = 'all',
+                                                   metric.binary = 'all',
+                                                   metric.filter = 'all')
 
-# Load current and future binary projections
-CurrentProj <- get_predictions(myBiomodProj, metric.binary = "TSS")
-FutureProj2140126 <- get_predictions(BiomodProj2140126, metric.binary = "TSS")
+myBiomodProjFuture4160126 <- BIOMOD_Projection(bm.mod = myBiomodModelOut,
+                                        proj.name = 'Future4160126',
+                                        new.env = climate_4160126,
+                                        models.chosen = 'all',
+                                        metric.binary = 'all',
+                                        build.clamping.mask = TRUE)
+myBiomodEMProjFuture4160126 <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM, 
+                                                   bm.proj =myBiomodProjFuture4160126,
+                                                   models.chosen = 'all',
+                                                   metric.binary = 'all',
+                                                   metric.filter = 'all')
 
-# Compute differences
-myBiomodRangeSize2140126 <- BIOMOD_RangeSize(proj.current = CurrentProj, 
-                                             proj.future = FutureProj2140126)
+myBiomodProjFuture2140585 <- BIOMOD_Projection(bm.mod = myBiomodModelOut,
+                                        proj.name = 'Future2140585',
+                                        new.env = climate_2140585,
+                                        models.chosen = 'all',
+                                        metric.binary = 'all',
+                                        build.clamping.mask = TRUE)
+myBiomodEMProjFuture2140585 <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM, 
+                                                   bm.proj =myBiomodProjFuture2140585,
+                                                   models.chosen = 'all',
+                                                   metric.binary = 'all',
+                                                   metric.filter = 'all')
 
-myBiomodRangeSize2140126$Compt.By.Models
-plot(myBiomodRangeSize2140126$Diff.By.Pixel)
-
-FutureProj2140126EM <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM, 
-                                                  bm.proj = BiomodProj2140126,
-                                                  models.chosen = 'all',
-                                                  metric.binary = 'all',
-                                                  metric.filter = 'all')
-
-# Project ensemble models (building single projections)
-FutureProj2140126EM <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM,
-                                                  proj.name = '2140126EM',
-                                                  new.env = future2140126,
-                                                  models.chosen = 'all',
-                                                  metric.binary = 'all',
-                                                  metric.filter = 'all')
-FutureProj2140126EM
-plot(FutureProj2140126EM)
-
-
-# Represent main results 
-gg_2140126 = bm_PlotRangeSize(bm.range = myBiomodRangeSize2140126,
-                              do.count = TRUE,
-                              do.perc = TRUE,
-                              do.maps = TRUE,
-                              do.mean = TRUE,
-                              do.plot = TRUE)
-```
-
-```{r ssp5852140, fig.height=10, fig.width=12, warning=FALSE}
-# 2140585
-# Load environmental variables extracted from BIOCLIM 2
-ssp2140585 <- list.files("2140585", pattern = ".tif$", full.names = TRUE)
-future2140585 <- terra::rast(ssp2140585)
-# Project onto future conditions
-BiomodProj2140585 <- BIOMOD_Projection(bm.mod = myBiomodModelOut,
-                                       proj.name = '2140585',
-                                       new.env = future2140585,
-                                       models.chosen = 'all',
-                                       metric.binary = 'TSS',
-                                       build.clamping.mask = TRUE)
-
-# Load current and future binary projections
-CurrentProj <- get_predictions(myBiomodProj, metric.binary = "TSS")
-FutureProj2140585 <- get_predictions(BiomodProj2140585, metric.binary = "TSS")
-
-# Compute differences
-myBiomodRangeSize2140585 <- BIOMOD_RangeSize(proj.current = CurrentProj, 
-                                             proj.future = FutureProj2140585)
-
-myBiomodRangeSize2140585$Compt.By.Models
-plot(myBiomodRangeSize2140585$Diff.By.Pixel)
+myBiomodProjFuture4160585 <- BIOMOD_Projection(bm.mod = myBiomodModelOut,
+                                        proj.name = 'Future4160585',
+                                        new.env = climate_4160585,
+                                        models.chosen = 'all',
+                                        metric.binary = 'all',
+                                        build.clamping.mask = TRUE)
+myBiomodEMProjFuture4160585 <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM, 
+                                                   bm.proj =myBiomodProjFuture4160585,
+                                                   models.chosen = 'all',
+                                                   metric.binary = 'all',
+                                                   metric.filter = 'all')
 
 
 
-FutureProj2140585EM <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM, 
-                                                  bm.proj = BiomodProj2140585,
-                                                  models.chosen = 'all',
-                                                  metric.binary = 'all',
-                                                  metric.filter = 'all')
 
-# Project ensemble models (building single projections)
-FutureProj2140585EM <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM,
-                                                  proj.name = '2140585EM',
-                                                  new.env = future2140585,
-                                                  models.chosen = 'all',
-                                                  metric.binary = 'all',
-                                                  metric.filter = 'all')
-FutureProj2140585EM
-plot(FutureProj2140585EM)
+# Get a summary report
+BIOMOD_Report(bm.out = myBiomodEM, strategy = 'report')
 
-# Represent main results 
-gg_2140585 = bm_PlotRangeSize(bm.range = myBiomodRangeSize2140585,
-                              do.count = TRUE,
-                              do.perc = TRUE,
-                              do.maps = TRUE,
-                              do.mean = TRUE,
-                              do.plot = TRUE)
-```
+# Get a pre-filled ODMAP
+BIOMOD_Report(bm.out = myBiomodEM, strategy = 'ODMAP')
 
-```{r ssp1262140, fig.height=10, fig.width=12, warning=FALSE, paged.print=TRUE}
-# 4160126
-# Load environmental variables extracted from BIOCLIM 2
-ssp4160126 <- list.files("4160126", pattern = ".tif$", full.names = TRUE)
-future4160126 <- terra::rast(ssp4160126)
-# Project onto future conditions
-BiomodProj4160126 <- BIOMOD_Projection(bm.mod = myBiomodModelOut,
-                                       proj.name = '4160126',
-                                       new.env = future4160126,
-                                       models.chosen = 'all',
-                                       metric.binary = 'TSS',
-                                       build.clamping.mask = TRUE)
+# Get a code report
+BIOMOD_Report(bm.out = myBiomodEM, strategy = 'code')
 
-# Load current and future binary projections
-CurrentProj <- get_predictions(myBiomodProj, metric.binary = "TSS")
-FutureProj4160126 <- get_predictions(BiomodProj4160126, metric.binary = "TSS")
-
-# Compute differences
-myBiomodRangeSize4160126 <- BIOMOD_RangeSize(proj.current = CurrentProj, 
-                                             proj.future = FutureProj4160126)
-
-myBiomodRangeSize4160126$Compt.By.Models
-plot(myBiomodRangeSize4160126$Diff.By.Pixel)
-
-
-
-FutureProj4160126EM <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM, 
-                                                  bm.proj = BiomodProj4160126,
-                                                  models.chosen = 'all',
-                                                  metric.binary = 'all',
-                                                  metric.filter = 'all')
-
-# Project ensemble models (building single projections)
-FutureProj4160126EM <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM,
-                                                  proj.name = '4160126EM',
-                                                  new.env = future4160126,
-                                                  models.chosen = 'all',
-                                                  metric.binary = 'all',
-                                                  metric.filter = 'all')
-FutureProj4160126EM
-plot(FutureProj4160126EM)
-
-
-# Represent main results 
-gg_4160126 = bm_PlotRangeSize(bm.range = myBiomodRangeSize4160126,
-                              do.count = TRUE,
-                              do.perc = TRUE,
-                              do.maps = TRUE,
-                              do.mean = TRUE,
-                              do.plot = TRUE)
-```
-
-```{r ssp5854160, fig.height=10, fig.width=12, warning=FALSE, paged.print=TRUE}
-# 4160585
-# Load environmental variables extracted from BIOCLIM 2
-ssp4160585 <- list.files("4160585", pattern = ".tif$", full.names = TRUE)
-future4160585 <- terra::rast(ssp4160585)
-# Project onto future conditions
-BiomodProj4160585 <- BIOMOD_Projection(bm.mod = myBiomodModelOut,
-                                       proj.name = '4160585',
-                                       new.env = future4160585,
-                                       models.chosen = 'all',
-                                       metric.binary = 'TSS',
-                                       build.clamping.mask = TRUE)
-
-# Load current and future binary projections
-CurrentProj <- get_predictions(myBiomodProj, metric.binary = "TSS")
-FutureProj4160585 <- get_predictions(BiomodProj4160585, metric.binary = "TSS")
-
-# Compute differences
-myBiomodRangeSize4160585 <- BIOMOD_RangeSize(proj.current = CurrentProj, 
-                                             proj.future = FutureProj4160585)
-
-myBiomodRangeSize4160585$Compt.By.Models
-plot(myBiomodRangeSize4160585$Diff.By.Pixel)
-
-
-
-FutureProj4160585EM <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM, 
-                                                  bm.proj = BiomodProj4160585,
-                                                  models.chosen = 'all',
-                                                  metric.binary = 'all',
-                                                  metric.filter = 'all')
-
-# Project ensemble models (building single projections)
-FutureProj4160585EM <- BIOMOD_EnsembleForecasting(bm.em = myBiomodEM,
-                                                  proj.name = '4160585EM',
-                                                  new.env = future4160585,
-                                                  models.chosen = 'all',
-                                                  metric.binary = 'all',
-                                                  metric.filter = 'all')
-FutureProj4160585EM
-plot(FutureProj4160585EM)
-
-
-# Represent main results 
-gg_4160585 = bm_PlotRangeSize(bm.range = myBiomodRangeSize4160585,
-                              do.count = TRUE,
-                              do.perc = TRUE,
-                              do.maps = TRUE,
-                              do.mean = TRUE,
-                              do.plot = TRUE)
-```
 
