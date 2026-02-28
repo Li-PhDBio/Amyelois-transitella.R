@@ -1,0 +1,84 @@
+Overview	Authorship	Study title	tobefilledbyuser
+Overview	Authorship	Author names	tobefilledbyuser
+Overview	Authorship	Contact	tobefilledbyuser
+Overview	Authorship	Study link	tobefilledbyuser
+Overview	Model objective	Model objective	
+Overview	Model objective	Target output	tobefilledbyuser
+Overview	Focal Taxon	Focal Taxon	Amyelois.transitella
+Overview	Location	Location	tobefilledbyuser
+Overview	Scale of Analysis	Spatial extent	ext(-163.75, -52.6666666666667, 20.6666666666667, 67.1666666666667)
+Overview	Scale of Analysis	Spatial resolution	0.0833333333333333, 0.0833333333333333
+Overview	Scale of Analysis	Temporal extent	
+Overview	Scale of Analysis	Temporal resolution	
+Overview	Scale of Analysis	Boundary	
+Overview	Biodiversity data	Observation type	NA
+Overview	Biodiversity data	Response data type	presence-only
+Overview	Predictors	Predictor types	NA
+Overview	Hypotheses	Hypotheses	tobefilledbyuser
+Overview	Assumptions	Model assumptions	tobefilledbyuser
+Overview	Algorithms	Modelling techniques	ANN, CTA, FDA, GAM, GBM, MARS, MAXNET, RF, SRE, XGBOOST
+Overview	Algorithms	Model complexity	
+Overview	Algorithms	Model averaging	
+Overview	Workflow	Model workflow	
+Overview	Software	Software	biomod2 v4.3.4.5
+Overview	Software	Code availability	
+Overview	Software	Data availability	
+Data	Biodiversity data	Taxon names	Amyelois.transitella
+Data	Biodiversity data	Taxonomic reference system	
+Data	Biodiversity data	Ecological level	
+Data	Biodiversity data	Data sources	
+Data	Biodiversity data	Sampling design	
+Data	Biodiversity data	Sample size	47 presences, 
+Data	Biodiversity data	Clipping	
+Data	Biodiversity data	Scaling	Thinning to keep only one occurrence per cell
+Data	Biodiversity data	Cleaning	
+Data	Biodiversity data	Absence data	none
+Data	Biodiversity data	Background data	5 sets of  pseudo-absences selected with sre strategy
+Data	Biodiversity data	Errors and biases	
+Data	Data partitioning	Training data	4 sets of  percent of the data for each pseudo-absence dataset
+Data	Data partitioning	Validation data	4 sets of  percent of the data for each pseudo-absence dataset
+Data	Data partitioning	Test data	none
+Data	Predictor variables	Predictor variables	bio15, bio19, bio4, bio8, elev
+Data	Predictor variables	Data sources	
+Data	Predictor variables	Spatial extent	ext(-163.75, -52.6666666666667, 20.6666666666667, 67.1666666666667)
+Data	Predictor variables	Spatial resolution	0.0833333333333333, 0.0833333333333333
+Data	Predictor variables	Coordinate reference system	+proj=longlat +datum=WGS84 +no_defs
+Data	Predictor variables	Temporal extent	
+Data	Predictor variables	Temporal resolution	
+Data	Predictor variables	Data processing	
+Data	Predictor variables	Errors and biases	
+Data	Predictor variables	Dimension reduction	
+Data	Transfer data	Data sources	
+Data	Transfer data	Spatial extent	
+Data	Transfer data	Spatial resolution	
+Data	Transfer data	Temporal extent	
+Data	Transfer data	Temporal resolution	
+Data	Transfer data	Models and scenarios	
+Data	Transfer data	Data processing	
+Data	Transfer data	Quantification of Novelty	
+Model	Variable pre-selection	Variable pre-selection	
+Model	Multicollinearity	Multicollinearity	
+Model	Model settings	Model settings (fitting)	
+Model	Model settings	Model settings (extrapolation)	
+Model	Model estimates	Coefficients	
+Model	Model estimates	Parameter uncertainty	
+Model	Model estimates	Variable importance	
+Model	Model selection - model averaging - ensembles	Model selection	
+Model	Model selection - model averaging - ensembles	Model averaging	
+Model	Model selection - model averaging - ensembles	Model ensembles	
+Model	Analysis and Correction of non-independence	Spatial autocorrelation	
+Model	Analysis and Correction of non-independence	Temporal autocorrelation	
+Model	Analysis and Correction of non-independence	Nested data	
+Model	Threshold selection	Threshold selection	
+Assessment	Performance statistics	Performance on training data	AUCroc, KAPPA, TSS for single models ;  for ensemble models
+Assessment	Performance statistics	Performance on validation data	AUCroc, KAPPA, TSS for single models ;  for ensemble models
+Assessment	Performance statistics	Performance on test data	AUCroc, KAPPA, TSS for single models ;  for ensemble models
+Assessment	Plausibility check	Response shapes	Response curves
+Assessment	Plausibility check	Expert judgement	
+Prediction	Prediction output	Prediction unit	
+Prediction	Prediction output	Post-processing	
+Prediction	Uncertainty quantification	Algorithmic uncertainty	
+Prediction	Uncertainty quantification	Input data uncertainty	
+Prediction	Uncertainty quantification	Parameter uncertainty	
+Prediction	Uncertainty quantification	Scenario uncertainty	
+Prediction	Uncertainty quantification	Novel environments	
